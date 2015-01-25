@@ -1,0 +1,386 @@
+---
+title: "Data Science (Johns Hopkins University): Practical Machine Learning: Project"
+author: "John W. Tiede"
+date: "01/19/2015"
+output: html_document
+---
+
+```{r setup, cache=FALSE, echo=FALSE, message=FALSE, warning=FALSE, tidy=FALSE, results='hide'}
+# Code to set working directory (enabled):
+if (TRUE) {
+    working.directory <- paste0(Sys.getenv("HOME"), "/WA/School/Coursera/DataScience_JohnsHopkins/08_MachineLearn/Project")
+    setwd(working.directory)
+    #getwd()
+}
+```
+
+## Problem Statement
+
+The complete problem statement appears at the [Practical Machine Learning](https://class.coursera.org/predmachlearn-010/human_grading/view/courses/973545/assessments/4/submissions) web site.  It has not be produced in its entirety to save space in this report.
+
+The problem is to classify how well an activity (dumbbell biceps curl) is done by a subject using a light weight (1.25Kg dumbbell) and monitored by four groups of sensors.
+
+## Executive Summary
+
+After the data set was cleaned, a random forest model was created.  This model used 53 features.  The model used 500 trees with 7 features tried at each split.  A validation set containing 4903 observations was preserved from the original data set.  The model was run on this validation training set, and it had an error of 0.245%.
+
+## Data Set
+
+A link to the data set used for this report is [here](http://groupware.les.inf.puc-rio.br/har).  From the website, here is a description of the experiment:
+
+> "Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E)."
+
+The citation for this data set is ...
+
+```
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. 
+Qualitative Activity Recognition of Weight Lifting Exercises. 
+Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13). 
+Stuttgart, Germany: ACM SIGCHI, 2013. 
+```
+
+There was no codebook provided with this data set, but [this](http://groupware.les.inf.puc-rio.br/work.jsf?p1=11201) link goes to the paper cited above.  This paper provides valuable information about the experiments.
+
+From the cited paper, here is a description of the sensors and data.  The sensors consisted of four 9-degrees of freedom Razor interial measurement units.  These units provide three-axes acceleration, gyroscope and magnetometer data at a joint sampling rate of 45Hz.  There were four sensor points: a bicep sensor (armband), a forearm sensor (glove), a belt sensor (lumbar belt), and a dumbbell sensor.  Pitch, roll and yaw (Euler angles) as well as the raw accelerometer, gyroscope and magnetometer readings were provided.  For each Euler angle of a sensor, the paper claims an additional eight features were provided: mean, variance, standard deviation, max, min, amplitude, kurtosis and skewness.  While this amounts to an additional 96 features, many of the data points were either entirely missing or mostly missing from the data sets provided by Prof. Leek.  As part of cleaning the data sets, I looked at columns that were empty (or mostly empty) and removed them from the training and test sets.  These columns were the additional features, and had the following prefixes: kurtosis_, skewness_, max_, min_, amplitude_, var_, avg_, and stddev_.  This allowed me to have a data set with rows all of which were complete cases.
+
+In addition, I removed the *raw_timestamp_part_1*, *raw_timestamp_part_2* and *cvtd_timestamp* columns for dates and times.  My thinking is that date and time of day should have no bearing on the quality of the activity.  I made the *user_name* a factor variable (6 levels).  It seems reasonable to identify a user with a row of data.  If this were a real application, I can see that it might have to be initialized to a specific user.  (One reason might be that a subject's forearm length is an important variable.  It is somewhat surprising that biometric information was not available for the test subjects.)  I also made the *new_window* variable a two-level ("no" and "yes") factor variable.
+
+```{r}
+suppressPackageStartupMessages(library(caret))
+
+# Load data:
+training.raw <- read.csv("./pml-training.csv", header=TRUE, sep=",", stringsAsFactors=FALSE)
+testing.raw <- read.csv("./pml-testing.csv", header=TRUE, sep=",", stringsAsFactors=FALSE)
+
+# Keep only certain columns:
+keepers <- c("ID","user_name","new_window","num_window","roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","total_accel_forearm","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z")
+
+training.subset <- training.raw[,c("classe", keepers)]
+testing.subset <- testing.raw[,c("problem_id", keepers)]
+
+# Make 'classe', 'user_name', and 'new_window' factors:
+training.subset$classe <- as.factor(training.subset$classe)
+training.subset$user_name <- as.factor(training.subset$user_name)
+training.subset$new_window <- as.factor(training.subset$new_window)
+
+testing.subset$user_name <- as.factor(testing.subset$user_name)
+testing.subset$new_window <- as.factor(testing.subset$new_window)
+```
+
+Below is an example of a plot done to determine suspect outliers.  Many plots were used to look at this data.  On each of these plots, looking at the boxplots, there appear to be single points which are extreme outliers.
+
+```{r, warning=FALSE}
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(GGally))
+
+# Look at outliers based on visual inspection:
+p <-ggpairs(training.subset[,c("classe","accel_belt_x","accel_dumbbell_x","accel_arm_x","accel_forearm_x")], 
+            colour='classe', alpha=0.4,
+            title="All: Accelerometer X")
+suppressMessages(print(p))
+p <-ggpairs(training.subset[,c("classe","gyros_belt_x","gyros_dumbbell_x","gyros_arm_x","gyros_forearm_x")], 
+            colour='classe', alpha=0.4,
+            title="All: Gyroscope X")
+suppressMessages(print(p))
+p <-ggpairs(training.subset[,c("classe","gyros_belt_y","gyros_dumbbell_y","gyros_arm_y","gyros_forearm_y")], 
+            colour='classe', alpha=0.4,
+            title="All: Gyroscope Y")
+suppressMessages(print(p))
+p <-ggpairs(training.subset[,c("classe","gyros_belt_z","gyros_dumbbell_z","gyros_arm_z","gyros_forearm_z")], 
+            colour='classe', alpha=0.4,
+            title="All: Gyroscope Z")
+suppressMessages(print(p))
+```
+
+I determined the *ID* for each of these extreme outliers.
+
+```{r}
+# Determine bad rows:
+badrow.1 <- training.subset$ID[training.subset$accel_belt_x < -100.0]
+badrow.2 <- training.subset$ID[training.subset$accel_dumbbell_x < -300.0]
+badrow.3 <- training.subset$ID[training.subset$gyros_dumbbell_x < -100.0]
+badrow.4 <- training.subset$ID[training.subset$gyros_dumbbell_y > 40.0]
+badrow.5 <- training.subset$ID[training.subset$magnet_dumbbell_y < -1000.0]
+badrow.6 <- training.subset$ID[training.subset$gyros_forearm_x < -15.0]
+badrow.7 <- training.subset$ID[training.subset$accel_forearm_y > 800.0]
+badrow.list <- unique(c(badrow.1, badrow.2, badrow.3, badrow.4, badrow.5, badrow.6, badrow.7))
+
+# Remove bad rows:
+for (i in length(badrow.list)) {
+  training.subset <- training.subset[training.subset$ID != badrow.list[i],]
+}
+```
+
+I identified rows that had `r length(badrow.list)` values which were far out of the ordinary and removed them.  Since I don't have access to the experimenters, I will assume that a sensor was improperly oriented or defective.
+
+I normalized the data.  This is important because we are comparing measurements in different units.  I choose Z-score standardization so that my features will have the mean equal to zero ($\mu=0$) and standard deviation of 1 ($\sigma=1$).  (This assumes a standard normal distribution.  The data exploration phase still needs to verify the shape of a variable's distribution after the rescaling is done.)  Also, it is important to use the scaling *determined by the training set only* on the validation and testing sets.  The validation and testing sets should **not** be scaling based on their means and standard deviations.  Z-score standardization applies the following transformation to the data:
+
+$$z=\frac{x-\mu}{\sigma}$$
+
+Z-score standardization was applied to all columns except *user_name*, *new_window*, and *num_window*.  I consider the column *num_window* to be special, because it is the size of a sliding measurement window (0.5s to 2.5s).  *num_window* is not really a continuous variable, so I didn't think applying normalization to it was appropriate.  *num_window* was applied applied as a treatment to all the columns remaining in the training/validation/test sets.
+
+My total number of predictor columns is `r length(keepers)`.  The total number of training cases is `r length(training.subset$user_name)`, and the number of complete training cases is `r sum(complete.cases(training.subset))`.
+
+The outcome of the experiments is labeled *classe* which I made a factor variable having five levels ('**A**', '**B**', '**C**', '**D**', and '**E**').
+
+```{r}
+# Apply z-score (leave first 5 columns alone):
+training.preObj <- preProcess(training.subset[, 6:dim(training.subset)[2]], method=c("center", "scale"))
+
+training.norm <- data.frame(training.subset[,1:5], predict(training.preObj, training.subset[,6:dim(training.subset)[2]]))
+testing.norm <- data.frame(testing.subset[1:5], predict(training.preObj, testing.subset[,6:dim(testing.subset)[2]]))
+
+# Partition for training & validation sets:
+inTrain = createDataPartition(training.norm$user_name, p=3/4)[[1]]
+training <- training.norm[inTrain,]
+validation <- training.norm[-inTrain,]
+rm(training.norm)
+testing <- testing.norm
+rm(testing.norm)
+
+rm(training.subset)
+rm(testing.subset)
+
+# Look at training:
+#str(training)
+```
+
+## Data Exploration
+
+Below is the code I used for exploring the data set.  The plots were organized as the plot above except they use the cleaned and normalized *training* data set.  (Only one has been reproduced in order to make this report tractable.)
+
+```{r, fig.width=7.0, fig.height=4.0, echo=FALSE}
+p <-ggpairs(training[,c("classe","roll_dumbbell","pitch_dumbbell","yaw_dumbbell")], 
+            colour='classe', alpha=0.4,
+            title="Dumbbell: Euler")
+suppressMessages(print(p))
+```
+
+```{r, fig.width=7.0, fig.height=4.0, echo=FALSE, eval=FALSE}
+p <-ggpairs(training[,c("classe","roll_dumbbell","pitch_dumbbell","yaw_dumbbell")], 
+            colour='classe', alpha=0.4,
+            title="Dumbbell: Euler")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z")], 
+            colour='classe', alpha=0.4,
+            title="Dumbbell: Gyroscope")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","total_accel_dumbbell")], 
+            colour='classe', alpha=0.4,
+            title="Dumbbell: Accelerometer"))
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z")], 
+            colour='classe', alpha=0.4,
+            title="Dumbbell: Magnetometer")
+suppressMessages(print(p))
+
+p <-ggpairs(training[,c("classe","roll_forearm","pitch_forearm","yaw_forearm")], 
+            colour='classe', alpha=0.4,
+            title="Forearm: Euler")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z")], 
+            colour='classe', alpha=0.4, params=c(params=c(binwidth=30)),
+            title="Forearm: Gyroscope")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","accel_forearm_x","accel_forearm_y","accel_forearm_z","total_accel_forearm")], 
+            colour='classe', alpha=0.4,
+            title="Forearm: Accelerometer")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z")], 
+            colour='classe', alpha=0.4, params=c(params=c(binwidth=30)),
+            title="Forearm: Magnetometer")
+suppressMessages(print(p))
+
+p <-ggpairs(training[,c("classe","roll_arm","pitch_arm","yaw_arm")], 
+            colour='classe', alpha=0.4,
+            title="Arm: Euler")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","gyros_arm_x","gyros_arm_y","gyros_arm_z")], 
+            colour='classe', alpha=0.4,
+            title="Arm: Gyroscope")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","accel_arm_x","accel_arm_y","accel_arm_z","total_accel_arm")],
+            colour='classe', alpha=0.4, 
+            title="Arm: Accelerometer")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","magnet_arm_x","magnet_arm_y","magnet_arm_z")], 
+            colour='classe', alpha=0.4,
+            title="Arm: Magnetometer")
+suppressMessages(print(p))
+
+p <-ggpairs(training[,c("classe","roll_belt","pitch_belt","yaw_belt")], 
+            colour='classe', alpha=0.4,
+            title="Belt: Euler")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","gyros_belt_x","gyros_belt_y","gyros_belt_z")], 
+            colour='classe', alpha=0.4,
+            title="Belt: Gyroscope")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","accel_belt_x","accel_belt_y","accel_belt_z","total_accel_belt")], 
+            colour='classe', alpha=0.4,
+            title="Belt: Accelerometer")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","magnet_belt_x","magnet_belt_y","magnet_belt_z")], 
+            colour='classe', alpha=0.4,
+            title="Belt: Magnetometer")
+suppressMessages(print(p))
+
+p <-ggpairs(training[,c("classe","total_accel_belt","total_accel_dumbbell","total_accel_forearm","total_accel_arm")], 
+            colour='classe', alpha=0.4,
+            title="Total Accelerometer")
+suppressMessages(print(p))
+
+p <-ggpairs(training[,c("classe","roll_belt","roll_dumbbell","roll_arm","roll_forearm")], 
+            colour='classe', alpha=0.4,
+            title="All: Roll")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","pitch_belt","pitch_dumbbell","pitch_arm","pitch_forearm")], 
+            colour='classe', alpha=0.4,
+            title="All: Pitch")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","yaw_belt","yaw_dumbbell","yaw_arm","yaw_forearm")], 
+            colour='classe', alpha=0.4,
+            title="All: Yaw")
+p <-ggpairs(training[,c("classe","accel_belt_x","accel_dumbbell_x","accel_arm_x","accel_forearm_x")], 
+            colour='classe', alpha=0.4,
+            title="All: Accelerometer X")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","accel_belt_y","accel_dumbbell_y","accel_arm_y","accel_forearm_y")], 
+            colour='classe', alpha=0.4,
+            title="All: Accelerometer Y")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","accel_belt_z","accel_dumbbell_z","accel_arm_z","accel_forearm_z")], 
+            colour='classe', alpha=0.4,
+            title="All: Accelerometer Z")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","gyros_belt_x","gyros_dumbbell_x","gyros_arm_x","gyros_forearm_x")], 
+            colour='classe', alpha=0.4,
+            title="All: Gyroscope X")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","gyros_belt_y","gyros_dumbbell_y","gyros_arm_y","gyros_forearm_y")], 
+            colour='classe', alpha=0.4,
+            title="All: Gyroscope Y")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","gyros_belt_z","gyros_dumbbell_z","gyros_arm_z","gyros_forearm_z")], 
+            colour='classe', alpha=0.4,
+            title="All: Gyroscope Z")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","magnet_belt_x","magnet_dumbbell_x","magnet_arm_x","magnet_forearm_x")], 
+            colour='classe', alpha=0.4,
+            title="All: Magnetometer X")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","magnet_belt_y","magnet_dumbbell_y","magnet_arm_y","magnet_forearm_y")], 
+            colour='classe', alpha=0.4,
+            title="All: Magnetometer Y")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("classe","magnet_belt_z","magnet_dumbbell_z","magnet_arm_z","magnet_forearm_z")], 
+            colour='classe', alpha=0.4,
+            title="All: Magnetometer Z")
+suppressMessages(print(p))
+
+p <-ggpairs(training[,c("user_name","roll_belt","roll_dumbbell","roll_arm","roll_forearm")], 
+            colour='user_name', alpha=0.4,
+            title="All: Roll")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("user_name","pitch_belt","pitch_dumbbell","pitch_arm","pitch_forearm")], 
+             colour='user_name', alpha=0.4,
+             title="All: Pitch")
+suppressMessages(print(p))
+p <-ggpairs(training[,c("user_name","yaw_belt","yaw_dumbbell","yaw_arm","yaw_forearm")], 
+            colour='user_name', alpha=0.4,
+            title="All: Yaw")
+suppressMessages(print(p))
+```
+
+## Model Building
+
+I created was a random forest.  In my training data, it was obvious not to use the ID column, because there could have been an ordering to the data set.  I originally included it only to remove extreme outliers.  In addition, I decided not to use *new_window* column, because they were associated with the process of data acquistion.
+
+```{r model.1}
+suppressPackageStartupMessages(library(randomForest))
+
+# Random forest:
+exclude.rf.1 <- c(".", "ID", "new_window")
+formula.rf.1 <- as.formula(paste("classe ~ ", paste(exclude.rf.1, collapse="-")))
+model.rf.1 <- randomForest(formula.rf.1, data=training, proximity=FALSE, importance=TRUE)
+model.rf.1
+
+# Predict on validation set:
+pred.rf.1 <- predict(model.rf.1, validation)
+table(pred.rf.1, validation$classe)
+
+validation.error <- round((1-(sum(pred.rf.1 == validation$classe))/length(validation$classe))*100, 5)
+
+# Predict on the test set:
+if (FALSE) {
+  test.rf.1 <- predict(model.rf.1, testing)
+  test.rf.1
+
+  pml_write_files <- function(x){
+    n = length(x)
+    for(i in 1:n){
+      filename = paste0("Answers/problem_id_",i,".txt")
+      write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+  }
+
+  pml_write_files(test.rf.1)
+}
+```
+
+The out-of-sample error is `r validation.error`%.
+
+```{r, echo=FALSE, eval=FALSE}
+prComp <- prcomp(training[,c(5,6,7)])
+typeColor <- ((training$user_name=="adelmo" && training$classe=="A")*1 + 1)
+typeColor <- ((training$classe=="E")*1 + 1)
+plot(prComp$x[,1], prComp$x[,2], col=typeColor, xlab="PC1", ylab="PC2")
+
+colnames(training)[44:46]
+prComp <- prcomp(training[,c(44,45,46)])
+typeColor <- ((training$classe=="E")*1 + 1)
+plot(prComp$x[,1], prComp$x[,2], col=typeColor, xlab="PC1", ylab="PC2")
+```
+
+```{r, echo=FALSE, eval=FALSE}
+suppressPackageStartupMessages(library(party))
+
+feature.list <- c("user_name",
+                  "accel_belt_y",
+                  "accel_belt_z")
+                  
+                  
+                  "accel_arm_x",
+                  "accel_arm_y",
+                  "pitch_dumbbell",
+                  "pitch_forearm",
+                  "roll_belt",
+                  "roll_dumbbell",
+                  "roll_arm",
+                  "roll_forearm")
+
+
+
+
+mlibrary(rattle)
+fancyRpartPlot(model.tree$finalModel)
+
+model.tree <- ctree(classe ~ ., data=training)
+
+# Do Principal Components using 'caret'
+#n=12
+#preProc <- preProcess(training[,!(names(training) %in% c("classe","user_name","new_window","num_window"))], method="pca", pcaComp=n)
+#trainPC.glm <- predict(preProc, training[,!(names(training) %in% c("classe","user_name","new_window","num_window"))])
+#model.glm <- train(training$classe ~ ., data=trainPC.glm, method="rf", importance=TRUE)
+#testPC <- predict(preProc, testing.subset[,-1])
+#confusionMatrix(testing.subset$classe, predict(model.glm, test.subset))$overall
+
+typeColor <- ((training$classe=="A")*1 + 1)
+
+```
+
+
+
+
+
+

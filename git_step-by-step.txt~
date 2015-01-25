@@ -1,0 +1,156 @@
+Step-by-step instructions for setting up Git Hub repository.
+
+Reference: https://help.github.com/articles/create-a-repo
+Reference: Slides from 01_DataToolkit
+Reference: /home/jwt/School/Coursera/DataScience_JohnsHopkins/01_DataToolkit/Pro_Git.english.pdf
+
+*#) Did NOT do these steps in this case (forked an existing github repository:
+  https://github.com/rdpeng/RepData_PeerAssessment1 )
+
+
+*1) Open https://github.com/
+
+
+*2) Sign-in.
+
+
+*3) In the upper-right corner of any page, click +, and then click
+   "New repository".
+
+
+*4) Create a short, memorable name for your repository:
+   "DataScience-03_GetCleanData"
+
+
+*5) Add a description of your repository:
+   "Created for the Coursera course "Getting and Cleaning Data" which is part
+   of the Johns Hopkins University Data Science Specialization"
+
+
+*6) Choose "public" repository.
+
+
+*7) Select Initialize this repository with a README.
+
+
+*8) Click Create repository.
+
+
+9) In local directory, initialize git:
+ninja{jwt}% cd /home/jwt/School/Coursera/DataScience_JohnsHopkins/05_Reproducable/Project/Project01
+ninja{jwt}% git init
+
+
+10) Create a local copy of the git repository:
+ninja{jwt}% git remote add origin https://github.com/JohnTD500/RepData_PeerAssessment1
+
+
+11) At this point, we can double-check the set up:
+ninja{jwt}% git config --global core.editor emacs  [only need to do this once]
+ninja{jwt}% git config --list
+user.name=John Tiede
+user.email=j.tiede@comcast.net
+color.ui=true
+core.editor=emacs
+core.repositoryformatversion=0
+core.filemode=true
+core.bare=false
+core.logallrefupdates=true
+remote.origin.url=https://github.com/JohnTD500/RepData_PeerAssessment1
+remote.origin.fetch=+refs/heads/*:refs/remotes/origin/*
+
+
+12) Initial commit:
+ninja{jwt}% git add activity.csv
+ninja{jwt}% git add git_step-by-step.txt
+ninja{jwt}% git add Project01.html
+ninja{jwt}% git add Project01.Rmd
+ninja{jwt}% git add README_local.txt
+
+
+13) Commit changes:
+ninja{jwt}% git commit -m "Initial project commit"
+[master (root-commit) f8ac0a3] Initial project commit
+[master (root-commit) 8515a5f] Initial project commit
+ 5 files changed, 18083 insertions(+)
+ create mode 100644 Project01.Rmd
+ create mode 100644 Project01.html
+ create mode 100644 README_local.txt
+ create mode 100644 activity.csv
+ create mode 100644 git_step-by-step.txt
+
+
+14) Save remote files locally first:
+ninja{jwt}% git pull https://github.com/JohnTD500/RepData_PeerAssessment1.git master
+From https://github.com/JohnTD500/RepData_PeerAssessment1
+ * branch            master     -> FETCH_HEAD
+Merge made by the 'recursive' strategy.
+ PA1_template.Rmd                      |  25 ++++++++++++
+ README.md                             | 168 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ activity.zip                          | Bin 0 -> 53559 bytes
+ doc/instructions.pdf                  | Bin 0 -> 187931 bytes
+ instructions_fig/sample_panelplot.png | Bin 0 -> 69753 bytes
+ 5 files changed, 193 insertions(+)
+ create mode 100644 PA1_template.Rmd
+ create mode 100644 README.md
+ create mode 100644 activity.zip
+ create mode 100644 doc/instructions.pdf
+ create mode 100644 instructions_fig/sample_panelplot.png
+
+
+15) Save local commits to Github
+ninja{jwt}% git push
+warning: push.default is unset; its implicit value is changing in
+Git 2.0 from 'matching' to 'simple'. To squelch this message
+and maintain the current behavior after the default changes, use:
+
+  git config --global push.default matching
+
+To squelch this message and adopt the new behavior now, use:
+
+  git config --global push.default simple
+
+When push.default is set to 'matching', git will push local branches
+to the remote branches that already exist with the same name.
+
+In Git 2.0, Git will default to the more conservative 'simple'
+behavior, which only pushes the current branch to the corresponding
+remote branch that 'git pull' uses to update the current branch.
+
+See 'git help config' and search for 'push.default' for further information.
+(the 'simple' mode was introduced in Git 1.7.11. Use the similar mode
+'current' instead of 'simple' if you sometimes use older versions of Git)
+
+Username for 'https://github.com': JohnTD500
+Password for 'https://JohnTD500@github.com': 
+Counting objects: 10, done.
+Delta compression using up to 4 threads.
+Compressing objects: 100% (9/9), done.
+Writing objects: 100% (9/9), 178.97 KiB | 0 bytes/s, done.
+Total 9 (delta 2), reused 0 (delta 0)
+To https://github.com/JohnTD500/RepData_PeerAssessment1
+   c052538..f9e8cd0  master -> master
+
+
+16) Get the status
+ninja{jwt}% git status
+On branch master
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+        modified:   git_step-by-step.txt
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+
+        #git_step-by-step.txt#
+        .#git_step-by-step.txt
+        git_step-by-step.txt~
+        repdata_data_activity.zip
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+################################################################################
+
+
