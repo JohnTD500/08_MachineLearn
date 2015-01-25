@@ -22,7 +22,7 @@ The problem is to classify how well an activity (dumbbell biceps curl) is done b
 
 ## Executive Summary
 
-After the data set was cleaned, a random forest model was created.  This model used 53 features.  The model used 500 trees with 7 features tried at each split.  A validation set containing 4903 observations was preserved from the original data set.  The model was run on this validation training set, and it had an error of 0.245%.
+After the data set was cleaned, a random forest model was created.  This model used 53 features.  The model used 500 trees with 7 features tried at each split.  A validation set containing 4903 observations was preserved from the original data set.  The model was run on this validation training set, and it had an error of less than 0.5%.
 
 ## Data Set
 
@@ -302,6 +302,7 @@ suppressPackageStartupMessages(library(randomForest))
 # Random forest:
 exclude.rf.1 <- c(".", "ID", "new_window")
 formula.rf.1 <- as.formula(paste("classe ~ ", paste(exclude.rf.1, collapse="-")))
+set.seed(80907)
 model.rf.1 <- randomForest(formula.rf.1, data=training, proximity=FALSE, importance=TRUE)
 model.rf.1
 

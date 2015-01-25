@@ -231,20 +231,5 @@ git push origin --all
 In a seperate comment below I'll go over some common problems. Hope this helps!
 
 
-ninja{jwt}% git checkout master
-Switched to branch 'master'
-Your branch is up-to-date with 'origin/master'.
-ninja{jwt}% git merge gh-pages
-Updating 531388b..2618781
-Fast-forward
- Project01.Rmd    |   386 ++
- Project01.html   |   262 ++
- README.md        |    15 +
- pml-testing.csv  |    21 +
- pml-training.csv | 19623 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 5 files changed, 20307 insertions(+)
- create mode 100644 Project01.Rmd
- create mode 100644 Project01.html
- create mode 100644 README.md
- create mode 100644 pml-testing.csv
- create mode 100644 pml-training.csv
+https://github.com/JohnTD500/08_MachineLearn/tree/master
+https://johntd500.github.io/08_MachineLearn/Index.html
